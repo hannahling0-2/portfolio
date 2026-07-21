@@ -1,0 +1,939 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Program Pulse — IPv6 Migration Program</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#0f1520; --panel:#161e2c; --panel2:#1c2534; --border:#2a3448;
+    --text:#e8edf5; --muted:#8b98ad; --accent:#5b8def; --accent2:#7c5cff;
+    --green:#3ecf8e; --yellow:#f0b429; --red:#f45b69; --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    padding:24px; max-width:1280px; margin:0 auto;
+  }
+  header{display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:16px; margin-bottom:20px;}
+  h1{font-size:22px; margin:0 0 4px 0;}
+  .sub{color:var(--muted); font-size:13px;}
+  .badge{display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:600; margin-left:8px;}
+  .badge.jira{background:#0052cc22; color:#5b9bf2;}
+  .badge.conf{background:#0079bf22; color:#4fb0e8;}
+  .badge.tab{background:#e6733222; color:#f0a15f;}
+  .controls{display:flex; align-items:center; gap:10px; background:var(--panel); padding:10px 14px; border-radius:var(--radius); border:1px solid var(--border);}
+  .controls label{font-size:12px; color:var(--muted);}
+  select, button{
+    background:var(--panel2); color:var(--text); border:1px solid var(--border);
+    padding:7px 10px; border-radius:8px; font-size:13px; cursor:pointer;
+  }
+  button.primary{background:linear-gradient(135deg,var(--accent),var(--accent2)); border:none; font-weight:600; color:#fff;}
+  button.primary:hover{opacity:0.9;}
+  button:hover{border-color:var(--accent);}
+
+  .section-title{font-size:15px; font-weight:700; margin:26px 0 10px 0; padding-bottom:8px; border-bottom:1px solid var(--border); letter-spacing:.01em;}
+  .section-title:first-of-type{margin-top:0;}
+  .kpis{display:grid; grid-template-columns:repeat(5,1fr); gap:12px; margin-bottom:20px;}
+  .kpi{background:var(--panel); border:1px solid var(--border); border-radius:var(--radius); padding:14px;}
+  .kpi .val{font-size:24px; font-weight:700;}
+  .kpi .label{font-size:12px; color:var(--muted); margin-top:2px;}
+  .kpi .delta{font-size:11px; margin-top:4px;}
+  .up{color:var(--green);} .down{color:var(--red);} .flat{color:var(--muted);}
+
+  .grid{display:grid; grid-template-columns:1.3fr 1fr; gap:16px; margin-bottom:16px;}
+  .panel{background:var(--panel); border:1px solid var(--border); border-radius:var(--radius); padding:16px;}
+  .panel h2{font-size:14px; margin:0 0 12px 0; display:flex; align-items:center; gap:8px;}
+  .panel h2 .src{font-size:10px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); font-weight:500;}
+
+  table{width:100%; border-collapse:collapse; font-size:12.5px;}
+  th{text-align:left; color:var(--muted); font-weight:500; padding:6px 8px; border-bottom:1px solid var(--border); font-size:11px; text-transform:uppercase; letter-spacing:.03em;}
+  td{padding:8px; border-bottom:1px solid #232d3f;}
+  tr:last-child td{border-bottom:none;}
+  .bar-wrap{background:#0d1420; border-radius:6px; height:8px; width:100%; overflow:hidden;}
+  .bar-fill{height:100%; border-radius:6px;}
+  .pill{padding:2px 7px; border-radius:6px; font-size:11px; font-weight:600;}
+  .pill.blocked{background:#f45b6922; color:var(--red);}
+  .pill.ontrack{background:#3ecf8e22; color:var(--green);}
+  .pill.risk{background:#f0b42922; color:var(--yellow);}
+
+  .prio{font-size:10px; padding:2px 7px; border-radius:5px; font-weight:700; display:inline-block;}
+  .prio.P0{background:#f45b6933; color:#ff8a95;}
+  .prio.P1{background:#f0b42933; color:#ffcf6b;}
+  .prio.P2{background:#5b8def33; color:#8fb4f5;}
+  .prio.P3{background:#8b98ad33; color:#c3ccd9;}
+  .status-badge{font-size:10.5px; padding:2px 8px; border-radius:6px; font-weight:600; display:inline-block;}
+  .status-badge.Open{background:#8b98ad22; color:var(--muted);}
+  .status-badge.InProgress{background:#5b8def22; color:var(--accent);}
+  .status-badge.Escalated{background:#f45b6922; color:var(--red);}
+  .status-badge.Resolved{background:#3ecf8e22; color:var(--green);}
+  .status-badge.Failing{background:#f45b6922; color:var(--red);}
+  tr.row-click{cursor:pointer;}
+  tr.row-click:hover{background:#1c2534;}
+  .pipeline-pct{font-size:40px; font-weight:800; line-height:1;}
+  .pipeline-pct.good{color:var(--green);} .pipeline-pct.warn{color:var(--yellow);} .pipeline-pct.bad{color:var(--red);}
+  .pipeline-sub{color:var(--muted); font-size:12px; margin:4px 0 14px 0;}
+  .mini-table th{font-size:10px;}
+  .mini-table td{padding:6px 8px;}
+
+  .carousel{display:flex; align-items:center; justify-content:center; gap:20px; padding:6px 0 4px 0;}
+  .carousel-arrow{background:var(--panel2); border:1px solid var(--border); color:var(--text); width:36px; height:36px; border-radius:50%; font-size:16px; cursor:pointer; flex-shrink:0; display:flex; align-items:center; justify-content:center; padding:0;}
+  .carousel-arrow:hover{border-color:var(--accent); color:var(--accent);}
+  .carousel-content{text-align:center; width:100%; max-width:420px;}
+  .carousel-cat-title{font-size:15px; font-weight:700; margin-bottom:2px;}
+  .carousel-total{color:var(--muted); font-size:12px; margin-bottom:8px;}
+  .carousel-dots{display:flex; justify-content:center; gap:6px; margin-top:12px;}
+  .carousel-dot{width:8px; height:8px; border-radius:50%; background:var(--border); cursor:pointer; padding:0; border:none;}
+  .carousel-dot.active{background:var(--accent);}
+  .carousel-empty{display:none; color:var(--muted); font-size:13px; padding:60px 0;}
+  #categoryPie{max-height:260px;}
+
+  .risk-item{padding:10px 0; border-bottom:1px solid #232d3f;}
+  .risk-item:last-child{border-bottom:none;}
+  .risk-top{display:flex; justify-content:space-between; font-size:12.5px; font-weight:600;}
+  .risk-meta{color:var(--muted); font-size:11px; margin-top:3px;}
+  .sev{font-size:10px; padding:1px 6px; border-radius:5px; font-weight:700;}
+  .sev.Critical{background:#f45b6933; color:#ff8a95;}
+  .sev.High{background:#f0b42933; color:#ffcf6b;}
+  .sev.Medium{background:#5b8def33; color:#8fb4f5;}
+  .resolved-tag{color:var(--green); font-size:10px; font-weight:700;}
+
+  .conf-item{padding:9px 0; border-bottom:1px solid #232d3f; font-size:12.5px;}
+  .conf-item:last-child{border-bottom:none;}
+  .conf-title{font-weight:600;}
+  .conf-meta{color:var(--muted); font-size:11px; margin-top:2px;}
+
+  canvas{max-height:230px;}
+
+  .modal-bg{display:none; position:fixed; inset:0; background:#000a; align-items:center; justify-content:center; z-index:50;}
+  .modal-bg.show{display:flex;}
+  .modal{background:var(--panel); border:1px solid var(--border); border-radius:var(--radius); width:560px; max-width:90vw; max-height:85vh; overflow:auto; padding:20px;}
+  .modal h3{margin:0 0 10px 0; font-size:15px; display:flex; justify-content:space-between; align-items:center;}
+  .modal pre{white-space:pre-wrap; font-family:ui-monospace,Menlo,monospace; font-size:12.5px; line-height:1.6; background:#0d1420; padding:14px; border-radius:8px; border:1px solid var(--border);}
+  .modal-actions{display:flex; gap:8px; margin-top:12px; justify-content:flex-end;}
+  .close-x{background:none; border:none; color:var(--muted); font-size:18px; cursor:pointer;}
+  footer{color:var(--muted); font-size:11px; text-align:center; margin-top:24px; padding-top:14px; border-top:1px solid var(--border);}
+
+  .status-banner{display:flex; align-items:center; gap:16px; margin-bottom:20px;}
+  .traffic-light{display:flex; flex-direction:column; gap:6px; background:#0d1420; padding:8px; border-radius:10px; border:1px solid var(--border); flex-shrink:0;}
+  .tl-dot{width:16px; height:16px; border-radius:50%; background:#232d3f; opacity:.35;}
+  .tl-dot.red.active{background:var(--red); opacity:1; box-shadow:0 0 10px 1px #f45b6977;}
+  .tl-dot.yellow.active{background:var(--yellow); opacity:1; box-shadow:0 0 10px 1px #f0b42977;}
+  .tl-dot.green.active{background:var(--green); opacity:1; box-shadow:0 0 10px 1px #3ecf8e77;}
+  .status-label{font-size:16px; font-weight:800; letter-spacing:.03em;}
+  .status-label.red{color:var(--red);}
+  .status-label.yellow{color:var(--yellow);}
+  .status-label.green{color:var(--green);}
+  .status-summary{color:var(--muted); font-size:12.5px; margin-top:3px;}
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Program Pulse <span class="badge jira">JIRA</span><span class="badge conf">CONFLUENCE</span><span class="badge tab">TABLEAU</span></h1>
+    <div class="sub">IPv6 Migration Program · synthetic demo data · assembled by Hannah Picar</div>
+  </div>
+  <div class="controls">
+    <label for="sprintSel">Viewing as of</label>
+    <select id="sprintSel"></select>
+    <button class="primary" id="genSlackBtn">Generate Slack Update</button>
+  </div>
+</header>
+
+<div class="panel status-banner">
+  <div class="traffic-light">
+    <span class="tl-dot red"></span>
+    <span class="tl-dot yellow"></span>
+    <span class="tl-dot green"></span>
+  </div>
+  <div>
+    <div class="status-label" id="statusLabel">--</div>
+    <div class="status-summary" id="statusSummary">--</div>
+  </div>
+</div>
+
+<div class="section-title">Risks and Defects</div>
+<div class="grid" style="grid-template-columns:1.2fr 1fr; margin-bottom:16px;">
+  <div class="panel">
+    <h2>Active Blockers <span class="src">Jira · priority &amp; status · click a row to open the ticket</span></h2>
+    <table>
+      <thead><tr><th>Priority</th><th>Blocker</th><th>Severity</th><th>Owner</th><th>Status</th><th>Date Created</th></tr></thead>
+      <tbody id="blockersTableBody"></tbody>
+    </table>
+  </div>
+  <div class="panel">
+    <h2>Pipeline Health <span class="src">Tableau · dual-stack test pipeline pass rate · click a ticket to open it</span></h2>
+    <div class="pipeline-pct" id="pipelinePct">--%</div>
+    <div class="pipeline-sub" id="pipelineSub">overall pass rate</div>
+    <canvas id="pipelineTrendChart" style="max-height:130px; margin-bottom:12px;"></canvas>
+    <table class="mini-table">
+      <thead><tr><th>Ticket</th><th>Top Failing Issue</th><th>Team</th><th>Priority</th><th>Date Created</th></tr></thead>
+      <tbody id="topFailingBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="section-title">Burn Down and Progress</div>
+<div class="grid">
+  <div class="panel">
+    <h2>Program Burndown <span class="src">Tableau · completion trend · click a point to drill down</span></h2>
+    <canvas id="burndownChart"></canvas>
+  </div>
+  <div class="panel">
+    <h2>Team Completion <span class="src">Tableau · by team, this sprint · click a bar to drill down</span></h2>
+    <canvas id="teamChart"></canvas>
+  </div>
+</div>
+
+<div class="grid">
+  <div class="panel" style="grid-column:1/3;">
+    <h2>Team Status <span class="src">Jira · epics rolled up by team</span></h2>
+    <table>
+      <thead><tr><th>Team</th><th>Owner</th><th>Progress</th><th>Tickets</th><th>Status</th></tr></thead>
+      <tbody id="teamTableBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="section-title">Release Readiness</div>
+<div class="grid">
+  <div class="panel" style="grid-column:1/3;">
+    <h2>Open P0/P1 Issues by Category <span class="src">Jira · release readiness · click a slice to drill down</span></h2>
+    <div class="carousel">
+      <button class="carousel-arrow" id="prevCat" aria-label="Previous category">&#8592;</button>
+      <div class="carousel-content">
+        <div class="carousel-cat-title" id="catTitle">Performance Issues</div>
+        <div class="carousel-total" id="catTotal"></div>
+        <canvas id="categoryPie"></canvas>
+        <div class="carousel-empty" id="catEmpty">No open P0/P1 issues in this category — all clear.</div>
+        <div class="carousel-dots" id="catDots"></div>
+      </div>
+      <button class="carousel-arrow" id="nextCat" aria-label="Next category">&#8594;</button>
+    </div>
+  </div>
+</div>
+
+<div class="grid">
+  <div class="panel">
+    <h2>Risk Register <span class="src">Confluence · risk &amp; escalation log</span></h2>
+    <div id="riskList"></div>
+  </div>
+  <div class="panel">
+    <h2>Recent Wiki Activity <span class="src">Confluence · pages touched</span></h2>
+    <div id="confList"></div>
+  </div>
+</div>
+
+<footer>All data on this page is synthetic, generated for demonstration purposes. No real Jira, Confluence, or Tableau systems are connected.</footer>
+
+<div class="modal-bg" id="drillModalBg">
+  <div class="modal" style="width:640px;">
+    <h3 id="drillModalTitle">Drill-down <button class="close-x" id="closeDrillModal">&times;</button></h3>
+    <div id="drillModalBody"></div>
+    <div class="modal-actions">
+      <button class="primary" id="closeDrillModal2">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="modalBg">
+  <div class="modal">
+    <h3>Slack Update — ready to paste <button class="close-x" id="closeModal">&times;</button></h3>
+    <pre id="slackText"></pre>
+    <div class="modal-actions">
+      <button id="copyBtn">Copy to clipboard</button>
+      <button class="primary" id="closeModal2">Done</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ---------- MOCK DATA MODEL ----------
+// 8 engineering teams working an IPv6 dual-stack migration across 6 sprints.
+// Each team has a fixed ticket total and a per-sprint snapshot of done/inProgress/blocked.
+
+const TEAMS = [
+  { id:'net',  name:'Network Infrastructure', owner:'D. Alvarez', total:42 },
+  { id:'plat', name:'Platform Core Services',  owner:'R. Kim',     total:36 },
+  { id:'stor', name:'Storage Engine',          owner:'T. Nguyen',  total:28 },
+  { id:'cloud',name:'Cloud Connectors',        owner:'J. Osei',    total:24 },
+  { id:'api',  name:'API Gateway',             owner:'M. Patel',   total:30 },
+  { id:'data', name:'Data Pipeline',           owner:'S. Cho',     total:33 },
+  { id:'idam', name:'Identity & Access',       owner:'L. Fischer', total:26 },
+  { id:'cust', name:'Customer Integrations',   owner:'A. Romero',  total:31 },
+];
+
+// snapshots[teamId][sprintIndex] = {done, inProgress, blocked}
+const SNAPSHOTS = {
+  net:  [{done:6,inProgress:10,blocked:2},{done:14,inProgress:12,blocked:4},{done:24,inProgress:10,blocked:2},{done:32,inProgress:8,blocked:0},{done:38,inProgress:4,blocked:0},{done:42,inProgress:0,blocked:0}],
+  plat: [{done:4,inProgress:14,blocked:0},{done:10,inProgress:16,blocked:0},{done:18,inProgress:14,blocked:1},{done:26,inProgress:8,blocked:1},{done:32,inProgress:4,blocked:0},{done:36,inProgress:0,blocked:0}],
+  stor: [{done:2,inProgress:12,blocked:3},{done:6,inProgress:14,blocked:4},{done:10,inProgress:12,blocked:3},{done:16,inProgress:9,blocked:1},{done:24,inProgress:4,blocked:0},{done:28,inProgress:0,blocked:0}],
+  cloud:[{done:5,inProgress:12,blocked:0},{done:11,inProgress:11,blocked:0},{done:17,inProgress:7,blocked:0},{done:21,inProgress:3,blocked:0},{done:24,inProgress:0,blocked:0},{done:24,inProgress:0,blocked:0}],
+  api:  [{done:3,inProgress:15,blocked:1},{done:8,inProgress:17,blocked:2},{done:14,inProgress:13,blocked:3},{done:19,inProgress:9,blocked:2},{done:24,inProgress:5,blocked:1},{done:27,inProgress:2,blocked:1}],
+  data: [{done:2,inProgress:16,blocked:4},{done:5,inProgress:18,blocked:6},{done:9,inProgress:16,blocked:5},{done:18,inProgress:12,blocked:1},{done:27,inProgress:6,blocked:0},{done:33,inProgress:0,blocked:0}],
+  idam: [{done:4,inProgress:14,blocked:0},{done:9,inProgress:15,blocked:0},{done:14,inProgress:10,blocked:2},{done:18,inProgress:6,blocked:3},{done:21,inProgress:3,blocked:2},{done:24,inProgress:1,blocked:1}],
+  cust: [{done:3,inProgress:17,blocked:0},{done:7,inProgress:19,blocked:0},{done:12,inProgress:15,blocked:0},{done:18,inProgress:10,blocked:1},{done:22,inProgress:6,blocked:3},{done:26,inProgress:3,blocked:2}],
+};
+
+const SPRINT_LABELS = ['Sprint 1','Sprint 2','Sprint 3','Sprint 4','Sprint 5','Sprint 6'];
+
+const RISKS = [
+  { key:'MIGR-1005', title:'Legacy load balancer lacks IPv6 support', team:'Network Infrastructure', severity:'Critical', opened:1, resolved:3 },
+  { key:'MIGR-1032', title:'Oracle DB dual-stack compatibility failing in staging', team:'Data Pipeline', severity:'High', opened:2, resolved:4 },
+  { key:'MIGR-1058', title:'Storage snapshot jobs time out over IPv6', team:'Storage Engine', severity:'Medium', opened:2, resolved:5 },
+  { key:'MIGR-1091', title:'Customer-facing API docs not updated for dual-stack', team:'API Gateway', severity:'Medium', opened:3, resolved:null },
+  { key:'MIGR-1120', title:'SSO breaks in IPv6-only test environment', team:'Identity & Access', severity:'High', opened:4, resolved:null },
+  { key:'MIGR-1147', title:'Partner webhook allowlist blocks IPv6 ranges', team:'Customer Integrations', severity:'High', opened:5, resolved:null },
+];
+
+const PRIORITY_MAP = { Critical:'P0', High:'P1', Medium:'P2', Low:'P3' };
+
+function riskStatus(r, sprintNum){
+  if(r.resolved!==null && r.resolved<=sprintNum) return 'Resolved';
+  if(r.severity==='Critical' || r.severity==='High') return 'Escalated';
+  return sprintNum===r.opened ? 'Open' : 'InProgress';
+}
+
+// Individual Tableau-tracked CI/test pipelines, one per team, with a pass-rate % per sprint.
+const PIPELINES = [
+  { name:'Dual-Stack Integration Suite',   team:'Network Infrastructure', passRate:[76,58,74,92,97,100] },
+  { name:'Oracle/Data Compatibility Suite',team:'Data Pipeline',          passRate:[64,48,55,88,96,100] },
+  { name:'Storage Regression Suite',       team:'Storage Engine',        passRate:[70,60,68,90,97,100] },
+  { name:'API Contract Tests',             team:'API Gateway',           passRate:[88,80,72,78,90,93] },
+  { name:'Identity SSO Suite',             team:'Identity & Access',     passRate:[95,96,80,70,82,90] },
+  { name:'Customer Webhook Validation',    team:'Customer Integrations', passRate:[98,97,96,90,74,82] },
+  { name:'Cloud Connector Health Checks',  team:'Cloud Connectors',      passRate:[90,93,96,98,99,100] },
+  { name:'Platform Core Regression',       team:'Platform Core Services',passRate:[92,94,88,90,97,99] },
+];
+
+// Individual Jira tickets tied to the pipelines above — the "why" behind a failing pipeline.
+const JIRA_ISSUES = [
+  { key:'MIGR-1042', title:'Load balancer VIP fails to bind IPv6 address', team:'Network Infrastructure', priority:'P0', opened:1, resolved:3 },
+  { key:'MIGR-1077', title:'Oracle JDBC driver rejects IPv6-only connection string', team:'Data Pipeline', priority:'P1', opened:2, resolved:4 },
+  { key:'MIGR-1103', title:'Snapshot job hangs on IPv6 socket timeout', team:'Storage Engine', priority:'P2', opened:2, resolved:5 },
+  { key:'MIGR-1129', title:'OpenAPI spec still lists IPv4-only examples', team:'API Gateway', priority:'P2', opened:3, resolved:null },
+  { key:'MIGR-1144', title:'SAML assertion consumer URL unreachable over IPv6', team:'Identity & Access', priority:'P1', opened:4, resolved:null },
+  { key:'MIGR-1158', title:'Partner webhook allowlist rejects IPv6 CIDR ranges', team:'Customer Integrations', priority:'P1', opened:5, resolved:null },
+  { key:'MIGR-1162', title:'Retry logic loops indefinitely on webhook 4xx over IPv6', team:'Customer Integrations', priority:'P2', opened:5, resolved:null },
+  { key:'MIGR-1170', title:'MFA token refresh fails intermittently on IPv6-only path', team:'Identity & Access', priority:'P2', opened:5, resolved:null },
+];
+
+// Release-readiness dataset: individual P0/P1 Jira issues tagged by QA category, used for the pie-chart carousel.
+const CATEGORIES = ['Performance','Security','Manual UI','System Test'];
+const CATEGORY_ISSUES = [
+  // Performance
+  { key:'PERF-201', team:'Network Infrastructure', category:'Performance', priority:'P1', opened:1, resolved:3, title:'IPv6 routing table lookup adds latency to VIP failover' },
+  { key:'PERF-207', team:'Storage Engine',         category:'Performance', priority:'P0', opened:2, resolved:4, title:'Snapshot throughput drops 40% on IPv6-only path' },
+  { key:'PERF-215', team:'Data Pipeline',          category:'Performance', priority:'P1', opened:2, resolved:null, title:'Batch job runtime regression after dual-stack rollout' },
+  { key:'PERF-222', team:'API Gateway',            category:'Performance', priority:'P1', opened:3, resolved:5, title:'Gateway p99 latency spikes under IPv6 load test' },
+  { key:'PERF-230', team:'Cloud Connectors',       category:'Performance', priority:'P1', opened:1, resolved:2, title:'Connector reconnect storm on IPv6 DNS failover' },
+  { key:'PERF-238', team:'Platform Core Services', category:'Performance', priority:'P0', opened:3, resolved:null, title:'Core service GC pauses increase under dual-stack traffic' },
+  { key:'PERF-245', team:'Identity & Access',      category:'Performance', priority:'P1', opened:4, resolved:null, title:'Token issuance latency regression on IPv6 path' },
+  { key:'PERF-251', team:'Customer Integrations',  category:'Performance', priority:'P1', opened:4, resolved:6, title:'Webhook delivery lag under IPv6 peak load' },
+  // Security
+  { key:'SEC-301', team:'Identity & Access',       category:'Security', priority:'P0', opened:1, resolved:3, title:'SSO session fixation risk over IPv6-only path' },
+  { key:'SEC-308', team:'Network Infrastructure',  category:'Security', priority:'P0', opened:2, resolved:null, title:'Firewall ACL gap allows unfiltered IPv6 traffic' },
+  { key:'SEC-314', team:'Customer Integrations',   category:'Security', priority:'P1', opened:2, resolved:5, title:'Partner API key exposed in IPv6 debug logs' },
+  { key:'SEC-320', team:'API Gateway',             category:'Security', priority:'P0', opened:3, resolved:null, title:'Rate limiter bypass possible via IPv6 address rotation' },
+  { key:'SEC-327', team:'Data Pipeline',           category:'Security', priority:'P1', opened:1, resolved:2, title:'Unencrypted internal IPv6 traffic between pipeline nodes' },
+  { key:'SEC-333', team:'Platform Core Services',  category:'Security', priority:'P1', opened:4, resolved:null, title:'Service mesh mTLS cert mismatch on IPv6 endpoints' },
+  { key:'SEC-340', team:'Storage Engine',          category:'Security', priority:'P1', opened:3, resolved:4, title:'Snapshot bucket ACL misconfigured for IPv6 clients' },
+  { key:'SEC-346', team:'Cloud Connectors',        category:'Security', priority:'P0', opened:5, resolved:null, title:'Connector credentials cached in plaintext on IPv6 nodes' },
+  // Manual UI
+  { key:'UI-401', team:'Customer Integrations',    category:'Manual UI', priority:'P1', opened:1, resolved:2, title:'Integration settings page fails to load over IPv6' },
+  { key:'UI-408', team:'API Gateway',              category:'Manual UI', priority:'P1', opened:2, resolved:null, title:'API key management UI shows stale dual-stack status' },
+  { key:'UI-415', team:'Platform Core Services',   category:'Manual UI', priority:'P0', opened:2, resolved:4, title:'Admin console dropdown broken on IPv6-only tenants' },
+  { key:'UI-422', team:'Identity & Access',        category:'Manual UI', priority:'P1', opened:3, resolved:null, title:'MFA setup screen mislabels IPv6 network status' },
+  { key:'UI-430', team:'Network Infrastructure',   category:'Manual UI', priority:'P1', opened:1, resolved:3, title:'Network health dashboard shows incorrect IPv6 badge' },
+  { key:'UI-437', team:'Data Pipeline',            category:'Manual UI', priority:'P1', opened:4, resolved:5, title:'Pipeline monitor UI truncates long IPv6 addresses' },
+  { key:'UI-444', team:'Storage Engine',           category:'Manual UI', priority:'P0', opened:4, resolved:null, title:'Storage console filter fails for IPv6 CIDR ranges' },
+  { key:'UI-450', team:'Cloud Connectors',         category:'Manual UI', priority:'P1', opened:5, resolved:null, title:'Connector setup wizard skips IPv6 config step' },
+  // System Test
+  { key:'SYS-501', team:'Data Pipeline',           category:'System Test', priority:'P0', opened:1, resolved:3, title:'Regression suite flakes on IPv6-only test environment' },
+  { key:'SYS-508', team:'Network Infrastructure',  category:'System Test', priority:'P1', opened:2, resolved:null, title:'End-to-end network test fails intermittently over IPv6' },
+  { key:'SYS-515', team:'Storage Engine',          category:'System Test', priority:'P1', opened:2, resolved:4, title:'Storage integration tests time out on dual-stack runners' },
+  { key:'SYS-522', team:'API Gateway',             category:'System Test', priority:'P0', opened:3, resolved:null, title:'Contract tests fail against IPv6-only mock server' },
+  { key:'SYS-529', team:'Identity & Access',       category:'System Test', priority:'P1', opened:3, resolved:5, title:'SSO test suite fails on IPv6-only CI runner' },
+  { key:'SYS-536', team:'Platform Core Services',  category:'System Test', priority:'P1', opened:1, resolved:2, title:'Smoke tests fail intermittently after dual-stack cutover' },
+  { key:'SYS-543', team:'Customer Integrations',   category:'System Test', priority:'P0', opened:5, resolved:null, title:'Webhook test harness cannot reach IPv6-only sandbox' },
+  { key:'SYS-550', team:'Cloud Connectors',        category:'System Test', priority:'P1', opened:4, resolved:null, title:'Connector health check test suite flaky on IPv6' },
+];
+
+// Daily Tableau pipeline pass-rate history — one run per day, 7 days per sprint (42 days total).
+// Day 7 of each sprint lines up with that sprint's rounded overall average from PIPELINES above.
+const PIPELINE_DAILY_OVERALL = [
+  66,70,68,73,78,81,84,   // Sprint 1 (ends 84)
+  82,76,70,65,70,74,78,   // Sprint 2 — dips during the load-balancer/Oracle escalations (ends 78)
+  76,72,75,78,74,77,79,   // Sprint 3 — still rocky (ends 79)
+  80,83,81,85,84,86,87,   // Sprint 4 — recovering as risks resolve (ends 87)
+  88,90,89,91,90,93,92,   // Sprint 5 (ends 92)
+  93,95,94,96,95,97,96,   // Sprint 6 (ends 96)
+];
+function dailyTrendForSprint(sprintNum){
+  const endIdx = sprintNum*7;
+  return PIPELINE_DAILY_OVERALL.slice(endIdx-7, endIdx);
+}
+
+const CONF_PAGES = [
+  { title:'IPv6 Migration Master Plan', updatedAt:1, by:'H. Picar' },
+  { title:'Team Onboarding Runbook', updatedAt:1, by:'H. Picar' },
+  { title:'Dual-Stack Testing Guide', updatedAt:2, by:'D. Alvarez' },
+  { title:'Risk Register & Escalations', updatedAt:2, by:'H. Picar' },
+  { title:'Oracle/Network Escalation Notes', updatedAt:3, by:'S. Cho' },
+  { title:'Sprint 3 Retro Notes', updatedAt:3, by:'H. Picar' },
+  { title:'Rollback Procedure', updatedAt:4, by:'R. Kim' },
+  { title:'Sprint 4 Retro Notes', updatedAt:4, by:'H. Picar' },
+  { title:'Cutover Readiness Checklist', updatedAt:5, by:'H. Picar' },
+  { title:'Sprint 5 Retro Notes', updatedAt:5, by:'H. Picar' },
+  { title:'Go-Live Comms Plan', updatedAt:6, by:'H. Picar' },
+  { title:'Sprint 6 Retro Notes', updatedAt:6, by:'H. Picar' },
+];
+
+// ---------- STATE / HELPERS ----------
+let currentSprint = 6; // 1-indexed
+const sprintIdx = () => currentSprint - 1;
+
+function teamSnap(teamId, sprintNum){ return SNAPSHOTS[teamId][sprintNum-1]; }
+
+function overallStats(sprintNum){
+  let total=0, done=0, blocked=0, inProgress=0;
+  TEAMS.forEach(t=>{
+    const s = teamSnap(t.id, sprintNum);
+    total += t.total; done += s.done; blocked += s.blocked; inProgress += s.inProgress;
+  });
+  return { total, done, blocked, inProgress, pct: Math.round((done/total)*100) };
+}
+
+function statusForTeam(t, sprintNum){
+  const s = teamSnap(t.id, sprintNum);
+  if(s.blocked > 0) return 'blocked';
+  if(s.done === t.total) return 'ontrack';
+  return 'ontrack';
+}
+
+// ---------- RENDER ----------
+const sprintSel = document.getElementById('sprintSel');
+SPRINT_LABELS.forEach((label,i)=>{
+  const opt = document.createElement('option');
+  opt.value = i+1; opt.textContent = label;
+  sprintSel.appendChild(opt);
+});
+sprintSel.value = currentSprint;
+sprintSel.addEventListener('change', e=>{ currentSprint = parseInt(e.target.value); renderAll(); });
+
+let burndownChart, teamChartInst, pipelineTrendChartInst;
+
+function renderBurndown(){
+  const labels = SPRINT_LABELS.slice(0, currentSprint);
+  const actual = labels.map((_,i)=> overallStats(i+1).pct);
+  const total = TEAMS.reduce((a,t)=>a+t.total,0);
+  const ideal = SPRINT_LABELS.map((_,i)=> Math.round(((i+1)/6)*100));
+
+  if(burndownChart) burndownChart.destroy();
+  burndownChart = new Chart(document.getElementById('burndownChart'), {
+    type:'line',
+    data:{
+      labels: SPRINT_LABELS,
+      datasets:[
+        { label:'Actual % complete', data: SPRINT_LABELS.map((_,i)=> i<currentSprint ? overallStats(i+1).pct : null), borderColor:'#5b8def', backgroundColor:'#5b8def33', tension:0.3, fill:true },
+        { label:'Ideal pace', data: ideal, borderColor:'#8b98ad', borderDash:[5,5], pointRadius:0, fill:false },
+      ]
+    },
+    options:{ plugins:{ legend:{ labels:{ color:'#e8edf5', font:{size:11} } } },
+      scales:{ x:{ ticks:{color:'#8b98ad'}, grid:{color:'#232d3f'} }, y:{ min:0, max:100, ticks:{color:'#8b98ad'}, grid:{color:'#232d3f'} } },
+      onHover:(evt,elements)=>{ evt.native.target.style.cursor = elements.some(e=>e.datasetIndex===0) ? 'pointer':'default'; },
+      onClick:(evt,elements)=>{
+        const el = elements.find(e=> e.datasetIndex===0);
+        if(el) openBurndownDrillDown(el.index+1);
+      }
+    }
+  });
+}
+
+function renderTeamChart(){
+  const names = TEAMS.map(t=>t.name.split(' ').map((w,i,arr)=> i===0? w : (arr.length>2 && i<arr.length-1? w[0]+'.' : w)).join(' '));
+  const pcts = TEAMS.map(t=> Math.round((teamSnap(t.id,currentSprint).done / t.total)*100));
+  const colors = TEAMS.map(t=> teamSnap(t.id,currentSprint).blocked>0 ? '#f45b69' : '#3ecf8e');
+
+  if(teamChartInst) teamChartInst.destroy();
+  teamChartInst = new Chart(document.getElementById('teamChart'), {
+    type:'bar',
+    data:{ labels: names, datasets:[{ label:'% complete', data: pcts, backgroundColor: colors, borderRadius:4 }] },
+    options:{ indexAxis:'y', plugins:{legend:{display:false}},
+      scales:{ x:{ min:0, max:100, ticks:{color:'#8b98ad'}, grid:{color:'#232d3f'} }, y:{ ticks:{color:'#e8edf5', font:{size:11}}, grid:{display:false} } },
+      onHover:(evt,elements)=>{ evt.native.target.style.cursor = elements.length ? 'pointer':'default'; },
+      onClick:(evt,elements)=>{ if(elements.length) openTeamDrillDown(TEAMS[elements[0].index]); }
+    }
+  });
+}
+
+function renderTeamTable(){
+  const body = document.getElementById('teamTableBody');
+  body.innerHTML = TEAMS.map(t=>{
+    const s = teamSnap(t.id,currentSprint);
+    const pct = Math.round((s.done/t.total)*100);
+    const status = s.blocked>0 ? 'blocked' : (pct===100 ? 'ontrack' : 'ontrack');
+    const label = s.blocked>0 ? 'Blocked' : (pct===100 ? 'Complete' : 'On Track');
+    const barColor = s.blocked>0 ? 'var(--red)' : (pct===100?'var(--green)':'var(--accent)');
+    return `<tr>
+      <td>${t.name}</td>
+      <td>${t.owner}</td>
+      <td style="width:160px;">
+        <div class="bar-wrap"><div class="bar-fill" style="width:${pct}%; background:${barColor};"></div></div>
+      </td>
+      <td>${s.done}/${t.total} <span style="color:var(--muted)">(${s.blocked} blocked)</span></td>
+      <td><span class="pill ${status}">${label}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+function renderRisks(){
+  const visible = RISKS.filter(r=> r.opened<=currentSprint && (r.resolved===null || r.resolved>currentSprint));
+  const list = document.getElementById('riskList');
+  if(visible.length===0){ list.innerHTML = '<div style="color:var(--muted); font-size:12.5px;">No open risks — all clear.</div>'; return; }
+  list.innerHTML = visible.map(r=>{
+    return `<div class="risk-item">
+      <div class="risk-top">
+        <span>${r.title}</span>
+        <span class="sev ${r.severity}">${r.severity}</span>
+      </div>
+      <div class="risk-meta">${r.team} · opened ${SPRINT_LABELS[r.opened-1]} · <span style="color:var(--yellow)">open</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderConfluence(){
+  const visible = CONF_PAGES.filter(p=> p.updatedAt<=currentSprint).sort((a,b)=> b.updatedAt-a.updatedAt).slice(0,6);
+  const list = document.getElementById('confList');
+  list.innerHTML = visible.map(p=>`
+    <div class="conf-item">
+      <div class="conf-title">${p.title}</div>
+      <div class="conf-meta">Updated by ${p.by} · ${SPRINT_LABELS[p.updatedAt-1]}</div>
+    </div>`).join('');
+}
+
+// ---------- SHARED COMPUTATION (used by both the dashboard render and the Slack generator) ----------
+
+// Sprint 1 day 1 — used to turn each ticket's "opened" sprint into a concrete created date.
+// Each sprint is treated as a 7-day window (matches the daily pipeline trend below).
+const PROGRAM_START_DATE = new Date('2025-01-06T00:00:00');
+
+function hashOffset(str, mod){
+  let h = 0;
+  for(let i=0;i<str.length;i++){ h = (h*31 + str.charCodeAt(i)) >>> 0; }
+  return h % mod;
+}
+
+// Deterministic "date created" for a ticket: sprint start + a stable 0-5 day offset derived from its key/title,
+// so tickets opened in the same sprint don't all show the identical date.
+function dateCreatedFor(item){
+  const dayOffset = (item.opened - 1) * 7 + hashOffset(item.key || item.title, 6);
+  const d = new Date(PROGRAM_START_DATE.getTime());
+  d.setDate(d.getDate() + dayOffset);
+  return d;
+}
+
+function formatDate(d){
+  return d.toLocaleDateString('en-US', { month:'short', day:'numeric' });
+}
+
+function computeBlockers(sprintNum){
+  const order = {P0:0,P1:1,P2:2,P3:3};
+  return RISKS.filter(r=> r.opened<=sprintNum)
+    .map(r=> ({...r, priority: PRIORITY_MAP[r.severity], status: riskStatus(r, sprintNum), created: formatDate(dateCreatedFor(r))}))
+    .filter(r=> r.status!=='Resolved')
+    .sort((a,b)=> order[a.priority]-order[b.priority]);
+}
+
+function computePipelineOverall(sprintNum){
+  const rates = PIPELINES.map(p=> p.passRate[sprintNum-1]);
+  const overall = Math.round(rates.reduce((a,b)=>a+b,0)/rates.length);
+  const prevRates = sprintNum>1 ? PIPELINES.map(p=> p.passRate[sprintNum-2]) : null;
+  const prevOverall = prevRates ? Math.round(prevRates.reduce((a,b)=>a+b,0)/prevRates.length) : null;
+  return { overall, prevOverall };
+}
+
+function computeTopFailingIssues(sprintNum, limit=5){
+  const order = {P0:0,P1:1,P2:2,P3:3};
+  const openIssues = JIRA_ISSUES.filter(i=> i.opened<=sprintNum && (i.resolved===null || i.resolved>sprintNum));
+  return openIssues.map(i=> ({...i, created: formatDate(dateCreatedFor(i))})).sort((a,b)=>{
+    const p = order[a.priority]-order[b.priority];
+    if(p!==0) return p;
+    return a.opened - b.opened;
+  }).slice(0,limit);
+}
+
+function renderBlockers(){
+  const rows = computeBlockers(currentSprint);
+  const body = document.getElementById('blockersTableBody');
+  if(rows.length===0){ body.innerHTML = '<tr><td colspan="6" style="color:var(--muted);">No blockers logged yet.</td></tr>'; return; }
+  body.innerHTML = rows.map(r=>`
+    <tr class="row-click" onclick="openBlockerTicket('${r.key}')">
+      <td><span class="prio ${r.priority}">${r.priority}</span></td>
+      <td>${r.title}</td>
+      <td><span class="sev ${r.severity}">${r.severity}</span></td>
+      <td>${r.team}</td>
+      <td><span class="status-badge ${r.status}">${r.status==='InProgress'?'In Progress':r.status}</span></td>
+      <td style="color:var(--muted);">${r.created}</td>
+    </tr>`).join('');
+}
+
+function renderPipelineHealth(){
+  const { overall, prevOverall } = computePipelineOverall(currentSprint);
+
+  const pctEl = document.getElementById('pipelinePct');
+  const cls = overall>=90?'good':(overall>=70?'warn':'bad');
+  pctEl.className = 'pipeline-pct ' + cls;
+  pctEl.textContent = overall + '%';
+
+  const sub = document.getElementById('pipelineSub');
+  const trendTxt = prevOverall!==null ? ` · ${overall>=prevOverall?'+':''}${overall-prevOverall}pt vs last sprint` : '';
+  sub.textContent = `overall pass rate across ${PIPELINES.length} pipelines${trendTxt}`;
+
+  const daily = dailyTrendForSprint(currentSprint);
+  const dayLabels = ['-6d','-5d','-4d','-3d','-2d','-1d','Today'];
+  if(pipelineTrendChartInst) pipelineTrendChartInst.destroy();
+  pipelineTrendChartInst = new Chart(document.getElementById('pipelineTrendChart'), {
+    type:'line',
+    data:{ labels: dayLabels, datasets:[{ label:'Daily pass rate %', data: daily, borderColor:'#f0a15f', backgroundColor:'#f0a15f22', tension:0.3, fill:true, pointRadius:3, pointBackgroundColor:'#f0a15f' }] },
+    options:{
+      plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label: ctx=> ctx.parsed.y + '% pass rate' } } },
+      scales:{
+        x:{ ticks:{color:'#8b98ad', font:{size:10}}, grid:{display:false} },
+        y:{ min:0, max:100, ticks:{color:'#8b98ad', font:{size:10}}, grid:{color:'#232d3f'} }
+      }
+    }
+  });
+
+  const top = computeTopFailingIssues(currentSprint, 5);
+  const body = document.getElementById('topFailingBody');
+  if(top.length===0){ body.innerHTML = '<tr><td colspan="5" style="color:var(--muted);">No failing pipelines — all green.</td></tr>'; return; }
+  body.innerHTML = top.map(i=>`
+    <tr class="row-click" onclick="openFailingTicket('${i.key}')">
+      <td style="color:var(--muted); font-family:ui-monospace,monospace;">${i.key}</td>
+      <td>${i.title}</td>
+      <td>${i.team}</td>
+      <td><span class="prio ${i.priority}">${i.priority}</span></td>
+      <td style="color:var(--muted);">${i.created}</td>
+    </tr>`).join('');
+}
+
+// ---------- SIMULATED DRILL-DOWN (click a chart to see the "real" Jira/Tableau detail) ----------
+function ticketsForTeam(teamName, sprintNum){
+  const jira = JIRA_ISSUES.filter(i=> i.team===teamName && i.opened<=sprintNum && (i.resolved===null || i.resolved>sprintNum)).map(i=> ({...i, source:'Pipeline'}));
+  const cat = CATEGORY_ISSUES.filter(i=> i.team===teamName && i.opened<=sprintNum && (i.resolved===null || i.resolved>sprintNum)).map(i=> ({...i, source:i.category}));
+  return [...jira, ...cat];
+}
+
+function renderTicketTable(tickets){
+  if(!tickets.length) return '<div style="color:var(--muted); font-size:12.5px; padding:14px 0;">No open P0/P1 tickets right now — all clear.</div>';
+  const order = {P0:0,P1:1,P2:2,P3:3};
+  const sorted = [...tickets].sort((a,b)=> order[a.priority]-order[b.priority]);
+  return `<table>
+    <thead><tr><th>Ticket</th><th>Title</th><th>Priority</th><th>Category</th><th>Date Created</th></tr></thead>
+    <tbody>
+      ${sorted.map(t=>`
+        <tr>
+          <td style="font-family:ui-monospace,monospace; color:var(--muted);">${t.key}</td>
+          <td>${t.title}</td>
+          <td><span class="prio ${t.priority}">${t.priority}</span></td>
+          <td>${t.source}</td>
+          <td style="color:var(--muted);">${formatDate(dateCreatedFor(t))}</td>
+        </tr>`).join('')}
+    </tbody>
+  </table>`;
+}
+
+function openDrillModal(title, srcLabel, bodyHtml){
+  document.getElementById('drillModalTitle').innerHTML = `${title} <span class="src" style="margin-left:8px;">${srcLabel}</span> <button class="close-x" id="closeDrillModal">&times;</button>`;
+  document.getElementById('drillModalBody').innerHTML = bodyHtml;
+  document.getElementById('drillModalBg').classList.add('show');
+  document.getElementById('closeDrillModal').addEventListener('click', closeDrillModal);
+}
+function closeDrillModal(){ document.getElementById('drillModalBg').classList.remove('show'); }
+document.getElementById('closeDrillModal2').addEventListener('click', closeDrillModal);
+
+function openTeamDrillDown(team){
+  const s = teamSnap(team.id, currentSprint);
+  const pct = Math.round((s.done/team.total)*100);
+  const tickets = ticketsForTeam(team.name, currentSprint);
+  const body = `
+    <div style="margin-bottom:12px; color:var(--muted); font-size:12.5px;">
+      Owner: ${team.owner} · ${s.done}/${team.total} tickets done (${pct}%) · ${s.blocked} blocked · ${SPRINT_LABELS[currentSprint-1]}
+    </div>
+    ${renderTicketTable(tickets)}`;
+  openDrillModal(team.name, 'Jira · team ticket breakdown', body);
+}
+
+function openBurndownDrillDown(sprintNum){
+  const overall = overallStats(sprintNum);
+  const rows = TEAMS.map(t=>{
+    const s = teamSnap(t.id, sprintNum);
+    const pct = Math.round((s.done/t.total)*100);
+    return `<tr><td>${t.name}</td><td>${s.done}/${t.total}</td><td>${pct}%</td><td>${s.blocked}</td></tr>`;
+  }).join('');
+  const body = `
+    <div style="margin-bottom:12px; color:var(--muted); font-size:12.5px;">
+      ${overall.pct}% complete overall (${overall.done}/${overall.total} tickets)
+    </div>
+    <table>
+      <thead><tr><th>Team</th><th>Tickets</th><th>% Complete</th><th>Blocked</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+  openDrillModal(`${SPRINT_LABELS[sprintNum-1]} Breakdown`, 'Tableau · completion by team', body);
+}
+
+function openCategoryDrillDown(category, teamName){
+  const tickets = CATEGORY_ISSUES
+    .filter(i=> i.category===category && i.team===teamName && i.opened<=currentSprint && (i.resolved===null || i.resolved>currentSprint))
+    .map(i=> ({...i, source: category}));
+  openDrillModal(`${teamName} — ${category}`, 'Jira · open P0/P1 issues', renderTicketTable(tickets));
+}
+
+function buildTicketDescription(t){
+  const statusPhrase = t.status==='Resolved'
+    ? 'Resolved as part of sprint remediation work.'
+    : `Currently ${t.status.toLowerCase()} and being tracked for resolution.`;
+  return `${t.title}. Affects the ${t.team} workstream during the IPv6 dual-stack migration. `
+    + `Flagged as ${t.priority} priority${t.severity ? ' / ' + t.severity + ' severity' : ''}. ${statusPhrase}`;
+}
+
+function openMockJiraTicket(t){
+  const statusClass = t.status.replace(' ','');
+  const body = `
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:14px; flex-wrap:wrap;">
+      <span class="prio ${t.priority}">${t.priority}</span>
+      ${t.severity ? `<span class="sev ${t.severity}">${t.severity}</span>` : ''}
+      <span class="status-badge ${statusClass}">${t.status}</span>
+    </div>
+    <div style="font-size:15px; font-weight:700; margin-bottom:16px;">${t.title}</div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px 16px; font-size:12.5px; margin-bottom:18px;">
+      <div><span style="color:var(--muted);">Team</span><br>${t.team}</div>
+      <div><span style="color:var(--muted);">Assignee</span><br>${t.assignee}</div>
+      <div><span style="color:var(--muted);">Reporter</span><br>${t.reporter}</div>
+      <div><span style="color:var(--muted);">Date Created</span><br>${t.created}</div>
+      ${t.linkedPipeline ? `<div><span style="color:var(--muted);">Linked Pipeline</span><br>${t.linkedPipeline}</div>` : ''}
+    </div>
+    <div style="font-size:10.5px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; margin-bottom:6px;">Description</div>
+    <div style="font-size:13px; line-height:1.6;">${buildTicketDescription(t)}</div>`;
+  openDrillModal(t.key, 'Jira · ticket detail', body);
+}
+
+function openBlockerTicket(key){
+  const r = computeBlockers(currentSprint).find(x=> x.key===key);
+  if(!r) return;
+  const owner = TEAMS.find(t=> t.name===r.team);
+  openMockJiraTicket({
+    key: r.key, title: r.title, team: r.team, priority: r.priority, severity: r.severity,
+    status: r.status==='InProgress' ? 'In Progress' : r.status, created: r.created,
+    reporter: 'H. Picar', assignee: owner ? owner.owner : '—', linkedPipeline: null
+  });
+}
+
+function openFailingTicket(key){
+  const i = JIRA_ISSUES.find(x=> x.key===key);
+  if(!i) return;
+  const owner = TEAMS.find(t=> t.name===i.team);
+  const pipeline = PIPELINES.find(p=> p.team===i.team);
+  const status = (i.resolved!==null && i.resolved<=currentSprint) ? 'Resolved' : 'Failing';
+  openMockJiraTicket({
+    key: i.key, title: i.title, team: i.team, priority: i.priority, severity: null,
+    status, created: formatDate(dateCreatedFor(i)),
+    reporter: 'H. Picar', assignee: owner ? owner.owner : '—', linkedPipeline: pipeline ? pipeline.name : null
+  });
+}
+
+// ---------- RELEASE READINESS CAROUSEL ----------
+let currentCategoryIdx = 0;
+let categoryPieChart;
+const CATEGORY_PALETTE = ['#5b8def','#7c5cff','#3ecf8e','#f0b429','#f45b69','#4fb0e8','#f0a15f','#c3ccd9'];
+
+function computeCategoryBreakdown(category, sprintNum){
+  const open = CATEGORY_ISSUES.filter(i=> i.category===category && i.opened<=sprintNum && (i.resolved===null || i.resolved>sprintNum));
+  const byTeam = {};
+  open.forEach(i=>{ byTeam[i.team] = (byTeam[i.team]||0)+1; });
+  return byTeam;
+}
+
+function renderCategoryPie(){
+  const category = CATEGORIES[currentCategoryIdx];
+  document.getElementById('catTitle').textContent = category + ' Issues';
+
+  const breakdown = computeCategoryBreakdown(category, currentSprint);
+  const labels = Object.keys(breakdown);
+  const data = Object.values(breakdown);
+  const total = data.reduce((a,b)=>a+b,0);
+
+  const canvas = document.getElementById('categoryPie');
+  const emptyEl = document.getElementById('catEmpty');
+  const totalEl = document.getElementById('catTotal');
+
+  if(categoryPieChart){ categoryPieChart.destroy(); categoryPieChart = null; }
+
+  if(total===0){
+    canvas.style.display = 'none';
+    emptyEl.style.display = 'block';
+    totalEl.textContent = '';
+  } else {
+    canvas.style.display = 'block';
+    emptyEl.style.display = 'none';
+    totalEl.textContent = `${total} open P0/P1 issue${total===1?'':'s'} · by team`;
+    categoryPieChart = new Chart(canvas, {
+      type:'pie',
+      data:{ labels, datasets:[{ data, backgroundColor: labels.map((_,i)=> CATEGORY_PALETTE[i % CATEGORY_PALETTE.length]) }] },
+      options:{ plugins:{ legend:{ position:'right', labels:{ color:'#e8edf5', font:{size:11}, boxWidth:12 } } },
+        onHover:(evt,elements)=>{ evt.native.target.style.cursor = elements.length ? 'pointer':'default'; },
+        onClick:(evt,elements)=>{ if(elements.length) openCategoryDrillDown(category, labels[elements[0].index]); }
+      }
+    });
+  }
+
+  document.querySelectorAll('.carousel-dot').forEach((d,i)=> d.classList.toggle('active', i===currentCategoryIdx));
+}
+
+function initCarousel(){
+  const dotsEl = document.getElementById('catDots');
+  dotsEl.innerHTML = CATEGORIES.map((c,i)=> `<button class="carousel-dot" data-idx="${i}" aria-label="${c}"></button>`).join('');
+  dotsEl.querySelectorAll('.carousel-dot').forEach(d=> d.addEventListener('click', e=>{
+    currentCategoryIdx = parseInt(e.currentTarget.dataset.idx);
+    renderCategoryPie();
+  }));
+  document.getElementById('prevCat').addEventListener('click', ()=>{
+    currentCategoryIdx = (currentCategoryIdx - 1 + CATEGORIES.length) % CATEGORIES.length;
+    renderCategoryPie();
+  });
+  document.getElementById('nextCat').addEventListener('click', ()=>{
+    currentCategoryIdx = (currentCategoryIdx + 1) % CATEGORIES.length;
+    renderCategoryPie();
+  });
+}
+
+function renderStatusBanner(){
+  const { overall: pipelinePct } = computePipelineOverall(currentSprint);
+  const blockers = computeBlockers(currentSprint);
+  const p0Count = blockers.filter(b=> b.priority==='P0').length;
+  const p1Count = blockers.filter(b=> b.priority==='P1').length;
+
+  let level, label;
+  if(pipelinePct < 70 || p0Count >= 2){
+    level = 'red'; label = 'OFF TRACK';
+  } else if(pipelinePct < 90 || p0Count >= 1 || p1Count >= 2){
+    level = 'yellow'; label = 'AT RISK';
+  } else {
+    level = 'green'; label = 'ON TRACK';
+  }
+
+  const openCount = p0Count + p1Count;
+  const summaries = {
+    green: `${pipelinePct}% pipeline pass rate, zero P0/P1 blockers open, program on pace.`,
+    yellow: `${pipelinePct}% pass rate with ${openCount} open P0/P1 blocker${openCount===1?'':'s'} still being resolved.`,
+    red: `${pipelinePct}% pass rate, ${p0Count} critical P0 blocker${p0Count===1?'':'s'} stalling migration progress.`,
+  };
+
+  document.querySelectorAll('.tl-dot').forEach(d=> d.classList.remove('active'));
+  document.querySelector(`.tl-dot.${level}`).classList.add('active');
+  const labelEl = document.getElementById('statusLabel');
+  labelEl.textContent = label;
+  labelEl.className = 'status-label ' + level;
+  document.getElementById('statusSummary').textContent = summaries[level];
+}
+
+function renderAll(){
+  renderStatusBanner(); renderBlockers(); renderPipelineHealth(); renderBurndown(); renderTeamChart(); renderTeamTable(); renderRisks(); renderConfluence(); renderCategoryPie();
+}
+initCarousel();
+renderAll();
+
+// ---------- SLACK UPDATE GENERATOR ----------
+function buildSlackUpdate(){
+  const cur = overallStats(currentSprint);
+  const prev = currentSprint>1 ? overallStats(currentSprint-1) : null;
+  const deltaPct = prev ? cur.pct - prev.pct : null;
+
+  const { overall: pipelinePct, prevOverall: prevPipelinePct } = computePipelineOverall(currentSprint);
+  const deltaPipeline = prevPipelinePct!==null ? pipelinePct - prevPipelinePct : null;
+
+  const completeTeams = TEAMS.filter(t=> teamSnap(t.id,currentSprint).done === t.total);
+  const newlyResolved = RISKS.filter(r=> r.resolved===currentSprint);
+  const newRisksThisSprint = RISKS.filter(r=> r.opened===currentSprint);
+
+  const blockers = computeBlockers(currentSprint);
+  const p0p1Blockers = blockers.filter(r=> r.priority==='P0' || r.priority==='P1');
+  const topFailing = computeTopFailingIssues(currentSprint, 3);
+  const openRisksCount = blockers.length;
+
+  let lines = [];
+  lines.push(`:satellite: *IPv6 Migration Program — ${SPRINT_LABELS[currentSprint-1]} Update*`);
+  lines.push('');
+  lines.push(`*Overall progress:* ${cur.pct}% complete (${cur.done}/${cur.total} tickets)` + (deltaPct!==null ? `  —  ${deltaPct>=0?'+':''}${deltaPct}pt vs last sprint` : ''));
+  lines.push(`*Pipeline health:* ${pipelinePct}% pass rate across ${PIPELINES.length} pipelines` + (deltaPipeline!==null ? `  —  ${deltaPipeline>=0?'+':''}${deltaPipeline}pt vs last sprint` : ''));
+  lines.push('');
+
+  lines.push('*Highlights:*');
+  if(completeTeams.length){
+    completeTeams.forEach(t=> lines.push(`• ${t.name} finished all migration work — fully done.`));
+  }
+  if(newlyResolved.length){
+    newlyResolved.forEach(r=> lines.push(`• Resolved: "${r.title}" (${r.team})`));
+  }
+  if(!completeTeams.length && !newlyResolved.length){
+    lines.push('• Steady progress across all teams, no major resolutions this sprint.');
+  }
+  lines.push('');
+
+  lines.push('*Needs attention — P0/P1 blockers:*');
+  if(p0p1Blockers.length){
+    p0p1Blockers.forEach(r=>{
+      lines.push(`• [${r.priority}] ${r.title} — ${r.team}, *${r.status==='InProgress'?'In Progress':r.status}* (open since ${SPRINT_LABELS[r.opened-1]})`);
+    });
+  } else {
+    lines.push('• No P0/P1 blockers open — nice.');
+  }
+  if(newRisksThisSprint.length){
+    newRisksThisSprint.forEach(r=> lines.push(`• New risk logged: "${r.title}" (${r.team}, ${r.severity})`));
+  }
+  lines.push('');
+
+  lines.push('*Top failing pipeline issues (Jira):*');
+  if(topFailing.length){
+    topFailing.forEach(i=> lines.push(`• ${i.key} [${i.priority}] ${i.title} — ${i.team}`));
+  } else {
+    lines.push('• No failing pipelines — all green.');
+  }
+  lines.push('');
+
+  lines.push('*Next steps:*');
+  const inProgTeams = TEAMS.filter(t=> teamSnap(t.id,currentSprint).done < t.total);
+  if(inProgTeams.length){
+    lines.push(`• ${inProgTeams.length} of ${TEAMS.length} teams still finishing tickets — on pace for completion by ${SPRINT_LABELS[5]}.`);
+  }
+  if(openRisksCount){
+    lines.push(`• Escalation sync planned for ${openRisksCount} open blocker(s), prioritizing P0/P1.`);
+  }
+  if(!inProgTeams.length && !openRisksCount){
+    lines.push('• Program complete — moving to post-migration monitoring.');
+  }
+
+  return lines.join('\n');
+}
+
+document.getElementById('genSlackBtn').addEventListener('click', ()=>{
+  document.getElementById('slackText').textContent = buildSlackUpdate();
+  document.getElementById('modalBg').classList.add('show');
+});
+document.getElementById('closeModal').addEventListener('click', ()=> document.getElementById('modalBg').classList.remove('show'));
+document.getElementById('closeModal2').addEventListener('click', ()=> document.getElementById('modalBg').classList.remove('show'));
+document.getElementById('copyBtn').addEventListener('click', ()=>{
+  const text = document.getElementById('slackText').textContent;
+  navigator.clipboard.writeText(text).then(()=>{
+    const btn = document.getElementById('copyBtn');
+    const orig = btn.textContent; btn.textContent = 'Copied!';
+    setTimeout(()=> btn.textContent = orig, 1500);
+  });
+});
+</script>
+</body>
+</html>
